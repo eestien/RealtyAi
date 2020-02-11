@@ -91,17 +91,6 @@ def mean():
 
     # PRICE
 
-    '''
-
-    X1 = data_offers[['renovation', 'has_elevator', 'longitude', 'latitude', 'full_sq', 'kitchen_sq',
-                 'is_apartment', 'time_to_metro', 'floor_last', 'floor_first', 'X', 'Y']]
-    data_offers["price"] = np.log1p(data_offers["price"])
-    y1 = data_offers[['price']].values.ravel()
-    print(X1.shape, y1.shape)
-
-    clf = GradientBoostingRegressor(n_estimators=350, max_depth=4, verbose=10)
-    clf.fit(X1, y1)
-    '''
     gbr = load(PATH_TO_PRICE_MODEL)
     cat = load(SETTINGS.MODEL + '/PriceModelCatGradient.joblib')
 
@@ -121,22 +110,13 @@ def mean():
                                    row.floor_first, np.log1p(row.X), np.log1p(row.Y), row.clusters]])))[0]/2)), axis=1)
 
 
-    # Get Profit Offers using Outliers algorithm detection
-    # outliers_alg = IsolationForest(contamination=0.2)
 
 
-    # outliers_alg.fit(data_offers[['price', 'full_sq', 'clusters']])
-    # outliers_it = data_offers[outliers_alg.predict(data_offers[['price', 'full_sq', 'clusters']]) == -1]
-    # print('Outliers: ', outliers_it.shape[0], flush=True)
-    # outliers_it['flat_id'] = outliers_it.index
 
 
-    # data_offers = data_offers[data_offers.price < data_offers.pred_price]
-    # data_offers['flat_id'] = data_offers.index
-    print('Profitable offers using price prediction model: ', data_offers.shape[0])
 
-    # data_offers = data_offers[data_offers.flat_id.isin(outliers_it.flat_id)]
-    # print('After concat: ', data_offers.shape[0])
+
+
     data_offers['profit'] = data_offers[['pred_price', 'price']].apply(lambda row: ((row.pred_price*100/row.price)-100), axis=1)
     data_offers = data_offers[(data_offers.profit >= 5)]
     data_offers = data_offers.sort_values(by=['profit'], ascending=False)
@@ -330,11 +310,8 @@ def map():
         most_important_features = list(df_for_current_label_term.corr().term.sort_values(ascending=False).index)[1:4]
         print("Most important features for term prediction: ", most_important_features)
         '''
-
-        GBR_TERM = GradientBoostingRegressor(n_estimators=350, max_depth=3, verbose=10, random_state=42, learning_rate=0.05)
-        # from sklearn.linear_model import LinearRegression
-        # GBR_TERM = LinearRegression()
         print(X_term.shape, y_term.shape, flush=True)
+        GBR_TERM = GradientBoostingRegressor(n_estimators=350, max_depth=3, verbose=10, random_state=42, learning_rate=0.05)
 
         GBR_TERM.fit(X_term, y_term)
 
@@ -343,7 +320,7 @@ def map():
         print("Term gbr: ", term_gbr_pred, flush=True)
 
         cat_term = CatBoostRegressor(random_state=42, l2_leaf_reg=1, learning_rate=0.05)
-        #cat = CatBoostRegressor(iterations=100, max_depth=8, l2_leaf_reg=1)
+
         train_time = Pool(X_term, y_term)
         cat_term.fit(train_time, verbose=5)
         term_cat = np.expm1(cat_term.predict([list_of_requested_params_term]))
