@@ -77,36 +77,13 @@ of flats with absolute same parameters as was flat to predict price. That is, th
 ### Data preprocessing: feature generating ###
  
 Using all generated features as for price prediction plus __price_meter_sq__(price/full_Sq)
-
-
-Порядок параметров в модели для предсказания __Срока Продажи__ :
-['life_sq', 'rooms', 'renovation', 'has_elevator', 'longitude', 'latitude', 'full_sq', 'kitchen_sq', 'time_to_metro', 'floor_last', 'floor_first', 'clusters', 'price_meter_sq', 'price']
-              
  
 
 ### Plotting price  - sale time  correlation for a few prices ###
 
-The main idea is visualize (and predict) different sale time for different flat price. I.e. if (as proposed) 
+The main idea is visualize (and predict) different sale time for different flat prices. I.e. if (as proposed) 
 flat is more profitable(sale price is less than it must be) it will sell out faster. And vice versa. 
 
 ### Оценка стоимости объекта и срока продажи. ###
-
-__Сбор данных:__ 
-1. Парсинг Yandex.Realty и Cian, сохраение в sql базу данных
-
-2. Выгрузка данных из sql в csv-файлы
-
-3. Предобработка данных:
- - Удаление выбросов с помощью стандартизированной оценки (Z-score). 
- - Кластеризация выборки по координатам для дальнейшего поиска похожих объявлений с целью построения графика зависимости срока продажи от цены
-
-##### Предсказание цены объекта (задача регрессии): #####
-- Модель строится на основании следующих признаков:
-_наличие ремонта, наличие лифта в доме, местоположение объекта на основании координат(широты и долготы), общей площади объекта,
- жилой площади, площади кухни, является ли объект жилы помещением, количество комнат, время до ближайшего метро, находится ли объект на первом этаже, находится ли объект на последнем этаже, дополнительные параметры сгенерированные на основе координат._
-- В качестве алгоритма(модели) используется Градиентный бустинг, Рандомный лес
-- Срок продажи для объекта предсказывается с учётом тех же параметров, что и для предсказания цены и добавляется значение предсказанной цены, цены за кв. м.
-- Используется Градиентный бустинг
-- Построение графика зависимости срока продажи от цены объекта осуществляется на значении выгодности объекта.
 
 ![Screenshot](https://github.com/eestien/RealtyAi/blob/master/screen_example.png)
