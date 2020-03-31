@@ -178,11 +178,6 @@ def main_preprocessing():
         lambda row: (row['price'] /
                      row['full_sq']), axis=1)
 
-    # Remove price and term outliers (out of 3 sigmas)
-    df1 = df[(np.abs(stats.zscore(df.price)) < 3)]
-    df2 = df[(np.abs(stats.zscore(df.term)) < 3)]
-
-    clean_data = pd.merge(df1, df2, on=list(df.columns), how='left')
     '''
     print("Find optimal number of K means: ")
     Sum_of_squared_distances = []
@@ -198,31 +193,31 @@ def main_preprocessing():
     '''
 
     # Create df with SECONDARY flats
-    clean_data_VTOR = clean_data[(clean_data.flat_type == 'SECONDARY')]
+    df_VTOR = df[(df.flat_type == 'SECONDARY')]
 
     # fit k-Means clustering on geo for SECONDARY flats
-    kmeans_VTOR = KMeans(n_clusters=130, random_state=42).fit(clean_data_VTOR[['longitude', 'latitude']])
+    kmeans_VTOR = KMeans(n_clusters=130, random_state=42).fit(df_VTOR[['longitude', 'latitude']])
     dump(kmeans_VTOR, PATH_TO_TIME_MODEL + '/KMEAN_CLUSTERING_MOSCOW_VTOR.joblib')
     labels = kmeans_VTOR.labels_
-    clean_data_VTOR['clusters'] = labels
+    df_VTOR['clusters'] = labels
 
     # Save .csv with SECONDARY flats
-    print('Saving to new csv', clean_data_VTOR.shape[0], flush=True)
-    clean_data_VTOR.to_csv(prepared_data + '/MOSCOW_VTOR.csv', index=None, header=True)
+    print('Saving to new csv', df_VTOR.shape[0], flush=True)
+    df_VTOR.to_csv(prepared_data + '/MOSCOW_VTOR.csv', index=None, header=True)
 
 
     # Create df with NEW flats
-    clean_data_new_flats = clean_data[((clean_data.flat_type == 'NEW_FLAT')|(clean_data.flat_type == 'NEW_SECONDARY'))]
+    df_new_flats = df[((df.flat_type == 'NEW_FLAT')|(f.flat_type == 'NEW_SECONDARY'))]
 
     # fit k-Means clustering on geo for NEW flats 
-    kmeans_NEW_FLAT = KMeans(n_clusters=30, random_state=42).fit(clean_data_new_flats[['longitude', 'latitude']])
+    kmeans_NEW_FLAT = KMeans(n_clusters=30, random_state=42).fit(df_new_flats[['longitude', 'latitude']])
     dump(kmeans_NEW_FLAT, PATH_TO_TIME_MODEL + '/KMEAN_CLUSTERING_MOSCOW_NEW_FLAT.joblib')
     labels = kmeans_NEW_FLAT.labels_
-    clean_data_new_flats['clusters'] = labels
+    df_new_flats['clusters'] = labels
 
     # Save .csv with NEW flats
-    print('Saving to new csv', clean_data_new_flats.shape[0], flush=True)
-    clean_data_new_flats.to_csv(prepared_data + '/MOSCOW_NEW_FLATS.csv', index=None, header=True)
+    print('Saving to new csv', df_new_flats.shape[0], flush=True)
+    df_new_flats.to_csv(prepared_data + '/MOSCOW_NEW_FLATS.csv', index=None, header=True)
 
 
 if __name__ == '__main__':

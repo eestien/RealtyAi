@@ -182,38 +182,33 @@ def main_preprocessing():
         lambda row: (row['price'] /
                      row['full_sq']), axis=1)
 
-    # Remove price and term outliers (out of 3 sigmas)
-    df1 = df[(np.abs(stats.zscore(df.price)) < 3)]
-    df2 = df[(np.abs(stats.zscore(df.term)) < 3)]
-
-    clean_data = pd.merge(df1, df2, on=list(df.columns), how='left')
 
     # Create df with SECONDARY flats
-    clean_data_vtor = clean_data[(clean_data.flat_type == 'SECONDARY')]
+    df_vtor = df[(df.flat_type == 'SECONDARY')]
 
     # fit k-Means clustering on geo for SECONDARY flats
-    kmeans_vtor = KMeans(n_clusters=60, random_state=42).fit(clean_data_vtor[['longitude', 'latitude']])
+    kmeans_vtor = KMeans(n_clusters=60, random_state=42).fit(df_vtor[['longitude', 'latitude']])
 
     dump(kmeans_vtor, PATH_TO_MODELS + '/KMEAN_CLUSTERING_SPB_VTOR.joblib')
     labels = kmeans_vtor.labels_
-    clean_data_vtor['clusters'] = labels
+    df_vtor['clusters'] = labels
 
     # Save .csv with SECONDARY flats
-    clean_data_vtor.to_csv(PREPARED_DATA + '/SPB_VTOR.csv', index=None, header=True)
+    df_vtor.to_csv(PREPARED_DATA + '/SPB_VTOR.csv', index=None, header=True)
 
 
     # Create df with NEW flats
-    clean_data_new_flats = clean_data[((clean_data.flat_type == 'NEW_FLAT') | (clean_data.flat_type == 'NEW_SECONDARY'))]
+    df_new_flats = df[((df.flat_type == 'NEW_FLAT') | (df.flat_type == 'NEW_SECONDARY'))]
 
     # fit k-Means clustering on geo for NEW flats
-    kmeans_NEW_FLAT = KMeans(n_clusters=20, random_state=42).fit(clean_data_new_flats[['longitude', 'latitude']])
+    kmeans_NEW_FLAT = KMeans(n_clusters=20, random_state=42).fit(df_new_flats[['longitude', 'latitude']])
 
     dump(kmeans_NEW_FLAT, PATH_TO_MODELS + '/KMEAN_CLUSTERING_NEW_FLAT_SPB.joblib')
     labels = kmeans_NEW_FLAT.labels_
-    clean_data_new_flats['clusters'] = labels
+    df_new_flats['clusters'] = labels
 
     # Save .csv with NEW flats
-    clean_data_new_flats.to_csv(PREPARED_DATA + '/SPB_NEW_FLATS.csv', index=None, header=True)
+    df_new_flats.to_csv(PREPARED_DATA + '/SPB_NEW_FLATS.csv', index=None, header=True)
 
 if __name__ == '__main__':
     main_preprocessing()

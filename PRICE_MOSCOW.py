@@ -27,8 +27,17 @@ PATH_TO_PRICE_MODEL_LGBM_NEW = SETTINGS.MODEL_MOSCOW + '/PriceModel_MOSCOW_NEW_L
 
 def Model_Secondary(data: pd.DataFrame):
 
-    data = data[(np.abs(stats.zscore(data.price)) < 3)]
-    data = data[(np.abs(stats.zscore(data.term)) < 3)]
+    # Remove price and term outliers (out of 3 sigmas)
+    data1 = data[(np.abs(stats.zscore(data.price)) < 3)]
+    data2 = data[(np.abs(stats.zscore(data.term)) < 3)]
+
+
+    data = pd.merge(data1, data2, on=list(data.columns), how='left')
+
+    # Fill NaN if it appears after merging 
+    data[['term']] = data[['term']].fillna(data[['term']].mean())
+
+    # Log Transformation
     data["longitude"] = np.log1p(data["longitude"])
     data["latitude"] = np.log1p(data["latitude"])
     data["full_sq"] = np.log1p(data["full_sq"])
@@ -87,9 +96,17 @@ def Model_Secondary(data: pd.DataFrame):
 
 def Model_New(data: pd.DataFrame):
 
+    # Remove price and term outliers (out of 3 sigmas)
+    data1 = data[(np.abs(stats.zscore(data.price)) < 3)]
+    data2 = data[(np.abs(stats.zscore(data.term)) < 3)]
 
-    data = data[(np.abs(stats.zscore(data.price)) < 3)]
-    data = data[(np.abs(stats.zscore(data.term)) < 3)]
+
+    data = pd.merge(data1, data2, on=list(data.columns), how='left')
+
+    # Fill NaN if it appears after merging 
+    data[['term']] = data[['term']].fillna(data[['term']].mean())
+
+    # Log Transformation
     data["longitude"] = np.log1p(data["longitude"])
     data["latitude"] = np.log1p(data["latitude"])
     data["full_sq"] = np.log1p(data["full_sq"])

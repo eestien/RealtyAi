@@ -23,6 +23,7 @@ import statistics
 import numpy as np
 import math
 
+
 PATH_PRICE_GBR_MOSCOW_VTOR = SETTINGS.MODEL_MOSCOW + '/PriceModel_MOSCOW_Vtor_GBR.joblib'
 PATH_PRICE_RF_MOSCOW_VTOR = SETTINGS.MODEL_MOSCOW + '/PriceModel_MOSCOW_Vtor_RF.joblib'
 PATH_PRICE_LGBM_MOSCOW_VTOR = SETTINGS.MODEL_MOSCOW + '/PriceModel_MOSCOW_Vtor_LGBM.joblib'
@@ -201,7 +202,9 @@ def map():
     floor_first = int(request.args.get('floor_first'))
     floor_last = int(request.args.get('floor_last'))
     time_to_metro = int(request.args.get('time_to_metro'))
-
+    is_rented = int(request.args.get('is_rented')) if request.args.get('is_rented') is not None else 0
+    rent_year = int(request.args.get('rent_year')) if request.args.get('rent_year') is not None else 0
+    rent_quarter = int(request.args.get('rent_quarter')) if request.args.get('rent_quarter') is not None else 0
     city_id = int(request.args.get('city_id')) if request.args.get('city_id') is not None else 0
 
     # initialize dataframe
@@ -210,7 +213,7 @@ def map():
     gbr = 0
     lgbm = 0
     rf = 0
-    print("PArams: ", city_id, secondary, flush=True)
+    print("Params: City id: {0}, is secondary: {1}".format(city_id, secondary), flush=True)
 
     # 0 = Moscow, 1 = Spb
     # Москва новостройки
@@ -275,20 +278,40 @@ def map():
     current_cluster = kmeans.predict([[longitude, latitude]])
     print("Current cluster is : ", current_cluster, flush=True)
 
-    # Predict Price using gbr
-    gbr_predicted_price = np.expm1(gbr.predict([[np.log1p(life_sq), rooms, renovation, has_elevator, np.log1p(longitude), np.log1p(latitude),
-                           np.log1p(full_sq),
-                           np.log1p(kitchen_sq), time_to_metro, floor_first, floor_last, current_cluster]]))
+    # Predict Price using gbr, rf, lgmb if not secondary 
+    if secondary == 0:
+        gbr_predicted_price = np.expm1(gbr.predict([[np.log1p(life_sq), rooms, renovation, has_elevator, np.log1p(longitude), np.log1p(latitude),
+                               np.log1p(full_sq),
+                               np.log1p(kitchen_sq), time_to_metro, floor_first, floor_last, current_cluster, is_rented, rent_quarter, rent_year]]))
+        print("Gbr predicted price NOT secondary: ", gbr_predicted_price, flush=True)
 
-    print("Gbr predicted price: ", gbr_predicted_price, flush=True)
+        rf_predicted_price = np.expm1(rf.predict([[np.log1p(life_sq), rooms, renovation, has_elevator, np.log1p(longitude), np.log1p(latitude),
+                               np.log1p(full_sq),
+                               np.log1p(kitchen_sq), time_to_metro, floor_first, floor_last, current_cluster, is_rented, rent_quarter, rent_year]]))
+        print("rf predicted price NOT secondary: ", rf_predicted_price, flush=True)
 
-    # Predict Price using lgbm
-    lgbm_pedicted_price = np.expm1(lgbm.predict([[np.log1p(life_sq), rooms, renovation, has_elevator, np.log1p(longitude), np.log1p(latitude), np.log1p(full_sq),
+        lgbm_pedicted_price = np.expm1(lgbm.predict([[np.log1p(life_sq), rooms, renovation, has_elevator, np.log1p(longitude), np.log1p(latitude),
+                               np.log1p(full_sq),
+                               np.log1p(kitchen_sq), time_to_metro, floor_first, floor_last, current_cluster, is_rented, rent_quarter, rent_year]]))
+        print("Lgbm predicted price NOT secondary: ", lgbm_pedicted_price, flush=True)
+
+    # Predict Price using gbr, rf, lgmb if secondary 
+    elif secondary == 1:
+        gbr_predicted_price = np.expm1(gbr.predict([[np.log1p(life_sq), rooms, renovation, has_elevator, np.log1p(longitude), np.log1p(latitude),
+                               np.log1p(full_sq), np.log1p(kitchen_sq), time_to_metro, floor_first, floor_last, current_cluster]]))
+        print("Gbr predicted price secondary: ", gbr_predicted_price, flush=True)
+
+        rf_predicted_price = np.expm1(rf.predict([[np.log1p(life_sq), rooms, renovation, has_elevator, np.log1p(longitude), np.log1p(latitude), np.log1p(full_sq),
                                        np.log1p(kitchen_sq), time_to_metro, floor_first, floor_last, current_cluster]]))
-    print("Lgbm predicted price: ", lgbm_pedicted_price, flush=True)
+        print("rf predicted price secondary: ", rf_predicted_price, flush=True)
 
-    # Calculate mean price value based on two algorithms
-    price_main = (gbr_predicted_price+lgbm_pedicted_price)/ 2
+        lgbm_pedicted_price = np.expm1(lgbm.predict([[np.log1p(life_sq), rooms, renovation, has_elevator, np.log1p(longitude), np.log1p(latitude), np.log1p(full_sq),
+                                       np.log1p(kitchen_sq), time_to_metro, floor_first, floor_last, current_cluster]]))
+        print("Lgbm predicted price secondary: ", lgbm_pedicted_price, flush=True)
+
+
+    # Calculate mean price value based on three algorithms
+    price_main = (gbr_predicted_price+lgbm_pedicted_price+rf_predicted_price)/ 3
     price = int(price_main[0])
     print("Predicted Price: ", price, flush=True)
 
@@ -299,6 +322,17 @@ def map():
     # TERM CALCULATING #
     #                  #
     ####################
+    
+    # Remove price and term outliers (out of 3 sigmas)
+    data1 = data[(np.abs(stats.zscore(data.price)) < 3)]
+    data2 = data[(np.abs(stats.zscore(data.term)) < 3)]
+
+
+    data = pd.merge(data1, data2, on=list(data.columns), how='left')
+
+    # Fill NaN if it appears after merging 
+    data[['term']] = data[['term']].fillna(data[['term']].mean())
+
 
     # Create subsample of flats from same cluster (from same "geographical" district)
     df_for_current_label = data[data.clusters == current_cluster[0]]
@@ -310,35 +344,65 @@ def map():
 
     # Create SUB Classes KMeans clustering based on size of subsample
     n = int(sqrt(df_for_current_label.shape[0]))
-    kmeans = KMeans(n_clusters=n, random_state=42).fit(
-        df_for_current_label[['full_sq', 'life_sq', 'kitchen_sq', 'clusters', 'time_to_metro', 'longitude', 'latitude', 'renovation', 'nums_of_changing']])
+    kmeans_sub = KMeans(n_clusters=n, random_state=42).fit(df_for_current_label[['full_sq', 'life_sq', 'kitchen_sq', 'time_to_metro', 'longitude', 'latitude', 'renovation']])#, 'nums_of_changing']])
 
     # Set new column equals to new SUBclusters values
-    labels = kmeans.labels_
+    labels = kmeans_sub.labels_
     df_for_current_label['SUB_cluster'] = labels
 
-    print(df_for_current_label.SUB_cluster.unique(), flush=True)
+    SUB_cluster = kmeans_sub.predict([[full_sq, life_sq, kitchen_sq, time_to_metro, longitude, latitude, renovation]])
+    # print(df_for_current_label.SUB_cluster.unique(), flush=True)
+
+
+    df_for_current_label = df_for_current_label[df_for_current_label.SUB_cluster == SUB_cluster[0]]
+
+    if len(df_for_current_label) < 2: 
+        df_for_current_label = data[data.clusters == current_cluster[0]]
 
     # Create new feature: number of flats in each SUBcluster
-    df_for_current_label['num_of_flats_in_SUB_cluster'] = df_for_current_label.groupby(['SUB_cluster'])["SUB_cluster"].transform("count")
+    # df_for_current_label['num_of_flats_in_SUB_cluster'] = df_for_current_label.groupby(['SUB_cluster'])["SUB_cluster"].transform("count")
 
-    # Drop Price and Term Outliers using Z-Score / 25-75 quartiles
-    df_for_current_label = df_for_current_label[df_for_current_label.price.between(df_for_current_label.term.quantile(.1), df_for_current_label.price.quantile(.9))]
+    # Drop Outliers using Z-Score / 15-85 quartiles
+    # price outliers removing
+    df_for_current_label = df_for_current_label[df_for_current_label.price.between(df_for_current_label.price.quantile(.15), df_for_current_label.price.quantile(.85))]
+    #  term outliers removing
+    df_for_current_label = df_for_current_label[df_for_current_label.term.between(df_for_current_label.term.quantile(.15), df_for_current_label.term.quantile(.85))]
+    # squares outliers removing
+    df_for_current_label = df_for_current_label[df_for_current_label.full_sq.between(df_for_current_label.full_sq.quantile(.15), df_for_current_label.full_sq.quantile(.85))]
+    df_for_current_label = df_for_current_label[df_for_current_label.life_sq.between(df_for_current_label.life_sq.quantile(.15), df_for_current_label.life_sq.quantile(.85))]
+    df_for_current_label = df_for_current_label[df_for_current_label.kitchen_sq.between(df_for_current_label.kitchen_sq.quantile(.15), df_for_current_label.kitchen_sq.quantile(.85))]
+    
 
     # Calculate price for each flat in SubSample based on price prediction models we have trained
-    df_for_current_label['pred_price'] = df_for_current_label[
-        ['life_sq', 'rooms', 'renovation', 'has_elevator', 'longitude', 'latitude', 'full_sq', 'kitchen_sq',
-         'time_to_metro', 'floor_last', 'floor_first', 'clusters']].apply(
-        lambda row:
-        int((np.expm1(gbr.predict([[np.log1p(row.life_sq), row.rooms, row.renovation, row.has_elevator,
-                                 np.log1p(row.longitude), np.log1p(row.latitude), np.log1p(row.full_sq),
-                                 np.log1p(row.kitchen_sq), row.time_to_metro, row.floor_last, row.floor_first,
-                                 row.clusters]])) +
-             (np.expm1(lgbm.predict([[np.log1p(row.life_sq), row.rooms, row.renovation, row.has_elevator,
-                                   np.log1p(row.longitude), np.log1p(row.latitude), np.log1p(row.full_sq),
-                                   np.log1p(row.kitchen_sq), row.time_to_metro, row.floor_last, row.floor_first,
-                                   row.clusters]]))))[0] / 2), axis=1)
+    if secondary == 0:
+        df_for_current_label['pred_price'] = df_for_current_label[
+            ['life_sq', 'rooms', 'renovation', 'has_elevator', 'longitude', 'latitude', 'full_sq', 'kitchen_sq',
+             'time_to_metro', 'floor_last', 'floor_first', 'clusters', 'is_rented', 'rent_quarter', 'rent_year']].apply(
+            lambda row:
+            int(((np.expm1(rf.predict([[np.log1p(row.life_sq), row.rooms, row.renovation, row.has_elevator,
+                                       np.log1p(row.longitude), np.log1p(row.latitude), np.log1p(row.full_sq),
+                                       np.log1p(row.kitchen_sq), row.time_to_metro, row.floor_last, row.floor_first,
+                                       row.clusters, row.is_rented, row.rent_quarter, row.rent_year]]))) + 
+                 (np.expm1(lgbm.predict([[np.log1p(row.life_sq), row.rooms, row.renovation, row.has_elevator,
+                                       np.log1p(row.longitude), np.log1p(row.latitude), np.log1p(row.full_sq),
+                                       np.log1p(row.kitchen_sq), row.time_to_metro, row.floor_last, row.floor_first,
+                                       row.clusters, row.is_rented, row.rent_quarter, row.rent_year]]))))[0] / 2), axis=1)
+        pass
 
+    if secondary == 1:
+        df_for_current_label['pred_price'] = df_for_current_label[
+            ['life_sq', 'rooms', 'renovation', 'has_elevator', 'longitude', 'latitude', 'full_sq', 'kitchen_sq',
+             'time_to_metro', 'floor_last', 'floor_first', 'clusters']].apply(
+            lambda row:
+            int(((np.expm1(rf.predict([[np.log1p(row.life_sq), row.rooms, row.renovation, row.has_elevator,
+                                       np.log1p(row.longitude), np.log1p(row.latitude), np.log1p(row.full_sq),
+                                       np.log1p(row.kitchen_sq), row.time_to_metro, row.floor_last, row.floor_first,
+                                       row.clusters]]))) + 
+                 (np.expm1(lgbm.predict([[np.log1p(row.life_sq), row.rooms, row.renovation, row.has_elevator,
+                                       np.log1p(row.longitude), np.log1p(row.latitude), np.log1p(row.full_sq),
+                                       np.log1p(row.kitchen_sq), row.time_to_metro, row.floor_last, row.floor_first,
+                                       row.clusters]]))))[0] / 2), axis=1)
+        pass
     # Calculate the profitability for each flat knowing the price for which the flat was sold and the price that
     # our model predicted
     df_for_current_label['profit'] = df_for_current_label[['pred_price', 'price']].apply(
