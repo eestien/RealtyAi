@@ -170,6 +170,8 @@ def main_preprocessing():
     num = df._get_numeric_data()
     num[num < 0] = 0
 
+    # Check if data contains only Moscow offers
+    df = df[((df['latitude'].astype('str').str.contains('59.'))|(df['latitude'].astype('str').str.contains('60.')))]
     # df['X'] = df[['latitude', 'longitude']].apply(
     #     lambda row: (m.cos(row['latitude']) *
     #                  m.cos(row['longitude'])), axis=1)

@@ -178,6 +178,9 @@ def main_preprocessing():
         lambda row: (row['price'] /
                      row['full_sq']), axis=1)
 
+    # Check if data contains only Moscow offers
+    df = df[~(df['latitude'].astype('str').str.contains('59.'))]
+
     '''
     print("Find optimal number of K means: ")
     Sum_of_squared_distances = []
