@@ -25,7 +25,7 @@ PREPARED_DATA = SETTINGS.DATA_SPB
 PATH_TO_MODELS = SETTINGS.MODEL_SPB
 
 
-# TODO:
+
 class MainPreprocessing():
     """Create class for data preprocessing"""
     def __init__(self):
@@ -51,9 +51,11 @@ class MainPreprocessing():
         prices = prices[((prices['changed_date'].str.contains('2020')) | (prices['changed_date'].str.contains('2019')) | (
             prices['changed_date'].str.contains('2018')))]
 
-
         # Calculating selling term. TIME UNIT: DAYS
-        prices['term'] = prices[['updated_at', 'changed_date']].apply(
+        # udpated_at - date, when offer was closed
+        # changed_at - date, when offer was opened
+        # Calculating selling term. TIME UNIT: DAYS
+        prices['term_yand'] = prices[['updated_at', 'changed_date']].apply(
             lambda row: (bck.date_fromisoformat(row['updated_at'][:-9])
                          - bck.date_fromisoformat(row['changed_date'][:-9])).days, axis=1)
 
@@ -66,10 +68,17 @@ class MainPreprocessing():
                                                        "kitchen_sq",
                                                        "life_sq",
                                                        "floor", "is_apartment",
-                                                       "building_id", 'offer_id',
+                                                       "building_id", 'created_at','updated_at', 'offer_id',
                                                        "closed", 'rooms', 'resource_id', 'flat_type', 'is_rented', 'rent_quarter',
                                                        'rent_year', 'renovation_type', 'windows_view'],
                             true_values="t", false_values="f", header=0)
+
+        # Calculating selling term. TIME UNIT: DAYS
+        flats['term_cian'] = flats[['updated_at', 'created_at']].apply(
+            lambda row: (bck.date_fromisoformat(row['updated_at'][:-9])
+                         - bck.date_fromisoformat(row['created_at'][:-9])).days, axis=1)
+        flats = flats[((flats['created_at'].str.contains('2020')) | (flats['created_at'].str.contains('2019')) | (
+            flats['created_at'].str.contains('2018')))]
 
         flats.closed = flats.closed.fillna(False)
 
@@ -130,6 +139,11 @@ class MainPreprocessing():
 
         # Merage prices and flats on flat_id
         prices_and_flats = pd.merge(prices, flats, on='flat_id', how="left")
+
+        # Select term
+        prices_and_flats['term'] = np.where(prices_and_flats['resource_id'] == 0, prices_and_flats['term_yand'],
+                                            prices_and_flats[
+                                                'term_cian'])  # yandex resource_id = 0, cian resource_id =1
 
         # Merge districts and buildings on district_id
         districts_and_buildings = pd.merge(districts, buildings, on='district_id', how='right')
@@ -313,7 +327,9 @@ class MainPreprocessing():
                  'mm_announce__5', 'mm_announce__6', 'mm_announce__7', 'mm_announce__8', 'mm_announce__9',
                  'mm_announce__10', 'mm_announce__11', 'mm_announce__12', 'yyyy_announce__18',
                  'yyyy_announce__19', 'yyyy_announce__20',
-                 'clusters']]
+                 'clusters', 'schools_500m', 'schools_1000m', 'kindergartens_500m',
+                                       'kindergartens_1000m', 'clinics_500m', 'clinics_1000m', 'shops_500m',
+                                       'shops_1000m']]
 
 
         # df = df[['price', 'full_sq', 'kitchen_sq', 'life_sq', 'is_apartment',
@@ -390,7 +406,9 @@ class MainPreprocessing():
                   row.mm_announce__7, row.mm_announce__8, row.mm_announce__9,
                   row.mm_announce__10, row.mm_announce__11, row.mm_announce__12,
                   row.yyyy_announce__18, row.yyyy_announce__19, row.yyyy_announce__20,
-                  row.clusters]]))[0]), axis=1)
+                  row.clusters, row.schools_500m, row.schools_1000m, row.kindergartens_500m,
+                                       row.kindergartens_1000m, row.clinics_500m, row.clinics_1000m, row.shops_500m,
+                                       row.shops_1000m]]))[0]), axis=1)
 
         # data_closed['pred_price'] = data_closed[list_of_columns].apply(
         #     lambda row:
@@ -459,12 +477,12 @@ if __name__ == '__main__':
 
     # Load data
     print('_'*10, "SPB", "_"*10)
-    print("Load data...", flush=True)
+    print("Data loading...", flush=True)
     df = mp.load_and_merge(raw_data=RAW_DATA)
     # df = df.iloc[:1000]
 
     # Generate new features
-    print("Generate new features...", flush=True)
+    print("New features generating...", flush=True)
     features_data = mp.new_features(data=df, full_sq_corridor_percent=full_sq_corridor_percent,
                                     price_corridor_percent=price_corridor_percent, part_data=False, K_clusters=K_CLUSTERS)
 
@@ -473,15 +491,15 @@ if __name__ == '__main__':
     cl_data = mp.clustering(features_data, path_kmeans_models=PATH_TO_MODELS, K_clusters=K_CLUSTERS)
 
     # Create dummies variables
-    print("Transform to dummies...", flush=True)
+    print("Categorical features transforming to dummies...", flush=True)
     cat_data = mp.to_dummies(cl_data)
 
     # Train price model
-    print("Train price model...", flush=True)
+    print("Price model training...", flush=True)
     price_model, list_columns = mp.train_price_model(data=cat_data)
 
     # Calculate profit for each flat
-    print("Calculating profit for each closed offer in dataset...", flush=True)
+    print("Profit calculating for each closed offer in dataset...", flush=True)
     test = mp.calculate_profit(data=cat_data, price_model=price_model, list_of_columns=list_columns)
 
     # Create separate files for secondary flats
