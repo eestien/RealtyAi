@@ -11,7 +11,7 @@ Installed packages:
 
 
 
-
+host: https://smartrealty.ai
 
 - - - -
 ### Profitable Offers ###
