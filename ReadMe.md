@@ -15,7 +15,12 @@ Installed packages:
 
 - - - -
 ### Profitable Offers ###
-_Profitable offers finds via output result of stacking price models. If predicted price higher than real - will assume, that it is profitable offer. 
+_If predicted price higher than real - will assume, that it is profitable offer._ 
+
+__Folders structure__
+
+`data_process` - data processing tools, models training. (`data_process/main_process.py` - main moudule combining all the tools) 
+`app` - models api 
 
 __Preprocessing__
 
@@ -27,11 +32,12 @@ Creating KMeans model for clustering flats by coordinates.
 __Main__
  
 `PRICE_SPB.py`, `PRICE_MOSCOW.py` - train price regression models.
-Stacking algorithms: Gradient Boosting machine regression, RandomForest Regressor, Light GBR.
+`TERM_SPB.py`, `TERM_MOSCOW.py` - train term regression models.
+Gradient Boosting machine regression, RandomForest Regressor, Light GBR.
 
 ### Run Price and Sale Time prediction ###
 1. `app.py` - Run.  server receives request with parameters and 
-returns the predicted price based on parameters. Price
+returns the predicted price based on parameters. 
 
 Prediction is based on the parameters transmitted with the request.
 Agorithm stacking is used: Gradient Boosting machine regression from sk-learn and lgbm regression, Random forest regression.
@@ -40,13 +46,13 @@ __Flats features using for price and sale time prediction__
 
 1. Price Prediction:
 
-Prediction based on 12 parameters('life_sq', 'rooms', 'renovation', 'has_elevator', 'longitude', 'latitude', 'full_sq', 'kitchen_sq',
-              'time_to_metro', 'floor_last', 'floor_first', 'clusters''). 
+Prediction based on next parameters: 'life_sq', 'rooms', 'renovation', 'has_elevator', 'longitude', 'latitude', 'full_sq', 'kitchen_sq',
+              'time_to_metro', 'floor_last', 'floor_first', 'clusters', infrastructure level). 
 
 2. Sale Time Prediction:
 
-Prediction based on 14 parameters('price', 'profit', 'life_sq', 'rooms', 'renovation', 'has_elevator',
- 'longitude', 'latitude', 'full_sq', 'kitchen_sq', 'time_to_metro', 'floor_last', 'floor_first', 'clusters')
+Prediction based on next parameters('price', 'profit', 'life_sq', 'rooms', 'renovation', 'has_elevator',
+ 'longitude', 'latitude', 'full_sq', 'kitchen_sq', 'time_to_metro', 'floor_last', 'floor_first', 'clusters', infrastructure level)
   
 
 ### PRICE PREDICTION ###
