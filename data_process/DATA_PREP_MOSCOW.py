@@ -15,6 +15,7 @@ import math as m
 import datetime
 import sys
 import os
+from math import sin, cos, sqrt, atan2, radians
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
@@ -23,14 +24,10 @@ import settings_local as SETTINGS
 
 np.random.seed(42)
 
-
-
-
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 
-
-# TODO:
+# TODO: Turn 'was_opened' calculating on
 
 # Define paths
 RAW_DATA = SETTINGS.PATH_TO_SINGLE_CSV_FILES_MOSCOW
@@ -47,6 +44,7 @@ NewFlats_filename = 'MOSCOW_NEW_FLATS.csv'
 
 class MainPreprocessing():
     """Create class for data preprocessing"""
+
     def __init__(self):
         """Initialize class"""
         pass
@@ -54,50 +52,54 @@ class MainPreprocessing():
     def load_and_merge(self, raw_data: str):
         prices = pd.read_csv(raw_data + "prices.csv", names=[
             'id', 'price', 'changed_date', 'flat_id', 'created_at', 'updated_at'
-        ], usecols=["price", "flat_id", 'created_at', 'changed_date', 'updated_at'])
+        ], usecols=["price", "flat_id"])
 
-
-        # Count number of price changing for each unique flat and SORT changed_date for each subgroup (group consist of one flat)
-        # prices['nums_of_changing'] = prices.sort_values(['changed_date'][-9:], ascending=True).groupby(['flat_id'])[
-        #     "flat_id"].transform("count")
-        # Group by falt_id and sort in ascending order for term counting
-        # prices = prices.sort_values(['changed_date'][-9:],ascending=True).groupby('flat_id')
-
-        # Keep just first date
+        # # Keep just first date
         prices = prices.drop_duplicates(subset='flat_id', keep="first")
-        prices = prices[((prices['changed_date'].str.contains('2020')) | (prices['changed_date'].str.contains('2019')) | (
-            prices['changed_date'].str.contains('2018')))]
-
 
         # Calculating selling term. TIME UNIT: DAYS
         # udpated_at - date, when offer was closed
-        # changed_at - date, when offer was opened 
+        # created_at - date, when offer was opened
         # Calculating selling term. TIME UNIT: DAYS
-        prices['term_yand'] = prices[['updated_at', 'changed_date']].apply(
-            lambda row: (bck.date_fromisoformat(row['updated_at'][:-9])
-                         - bck.date_fromisoformat(row['changed_date'][:-9])).days, axis=1)
+        # prices['term_yand'] = prices[['last_change_at', 'changed_date']].apply(
+        #     lambda row: (bck.date_fromisoformat(row['last_change_at'][:-9])
+        #                  - bck.date_fromisoformat(row['changed_date'][:-9])).days, axis=1)
 
+        # Load flats
         flats = pd.read_csv(raw_data + "flats.csv",
                             names=['id', 'full_sq', 'kitchen_sq', 'life_sq', 'floor', 'is_apartment',
                                    'building_id', 'created_at',
                                    'updated_at', 'offer_id', 'closed', 'rooms', 'image', 'resource_id',
                                    'flat_type', 'is_rented', 'rent_quarter', 'rent_year', 'agency', 'renovation_type',
-                                   'windows_view'],
+                                   'windows_view', 'close_date'],
                             usecols=["id", "full_sq",
-                                                       "kitchen_sq",
-                                                       "life_sq",
-                                                       "floor", "is_apartment",
-                                                       "building_id", 'created_at','updated_at', 'offer_id',
-                                                       "closed", 'rooms', 'resource_id', 'flat_type', 'is_rented', 'rent_quarter',
-                                                       'rent_year', 'renovation_type', 'windows_view'
-                                                       ],
+                                     "kitchen_sq",
+                                     "life_sq",
+                                     "floor", "is_apartment",
+                                     "building_id", 'created_at', 'offer_id',
+                                     "closed", 'rooms', 'image', 'resource_id', 'flat_type', 'is_rented', 'rent_quarter',
+                                     'rent_year', 'renovation_type', 'windows_view', 'close_date'
+                                     ],
                             true_values="t", false_values="f", header=0)
-        # Calculating selling term. TIME UNIT: DAYS
-        flats['term_cian'] = flats[['updated_at', 'created_at']].apply(
-            lambda row: (bck.date_fromisoformat(row['updated_at'][:-9])
-                         - bck.date_fromisoformat(row['created_at'][:-9])).days, axis=1)
-        flats = flats[((flats['created_at'].str.contains('2020')) | (flats['created_at'].str.contains('2019')) | (
-            flats['created_at'].str.contains('2018')))]
+
+        # Replace negative values with 0
+        num = flats._get_numeric_data()
+        num[num < 0] = 0
+
+        # Calculating selling term.
+        # First fulfill missing values in close_data with 0 and created_at with mode value
+        flats.created_at = flats.created_at.fillna(flats.created_at.mode()[0])
+        flats.close_date = flats.close_date.fillna(flats.close_date.mode()[0])
+
+
+        # TIME UNIT: DAYS
+        flats['term'] = np.where(flats['closed'] == 1, flats[['close_date', 'created_at']].apply(
+            lambda row: (bck.date_fromisoformat(row['close_date'])
+                         - bck.date_fromisoformat(row['created_at'][:-9])).days, axis=1), 0)
+
+        # Leave flats which were NOT created BEFORE 2018
+        # flats = flats[((flats['created_at'].str.contains('2020')) | (flats['created_at'].str.contains('2019')) | (
+        #     flats['created_at'].str.contains('2018')))]
 
         # Replace all missed values in FLAT_TYPE with 'SECONDARY'
         flats.flat_type = flats['flat_type'].fillna('SECONDARY')
@@ -131,9 +133,10 @@ class MainPreprocessing():
                                 usecols=["id", "max_floor", 'building_type_str', "built_year", "flats_count",
                                          "renovation",
                                          "has_elevator",
-                                         "district_id", 'longitude', 'latitude', 'schools_500m', 'schools_1000m', 'kindergartens_500m',
-                                       'kindergartens_1000m', 'clinics_500m', 'clinics_1000m', 'shops_500m',
-                                       'shops_1000m' # nominative scale
+                                         "district_id", 'longitude', 'latitude', 'schools_500m', 'schools_1000m',
+                                         'kindergartens_500m',
+                                         'kindergartens_1000m', 'clinics_500m', 'clinics_1000m', 'shops_500m',
+                                         'shops_1000m'  # nominative scale
                                          ],
                                 true_values="t", false_values="f", header=0)
 
@@ -160,14 +163,8 @@ class MainPreprocessing():
         # Merage prices and flats on flat_id
         prices_and_flats = pd.merge(prices, flats, on='flat_id', how="left")
 
-        # Select term
-        prices_and_flats['term'] = np.where(prices_and_flats['resource_id'] == 0, prices_and_flats['term_yand'],
-                                            prices_and_flats[
-                                                'term_cian'])  # yandex resource_id = 0, cian resource_id =1
-
         # Merge districts and buildings on district_id
         districts_and_buildings = pd.merge(districts, buildings, on='district_id', how='right')
-
 
         # Merge to one main DF on building_id
         df = pd.merge(prices_and_flats, districts_and_buildings, on='building_id', how='left')
@@ -176,7 +173,6 @@ class MainPreprocessing():
         df = pd.merge(df, time_to_metro, on="building_id", how='left')
         # df[['time_to_metro']] = df[['time_to_metro']].apply(lambda x: x.fillna(x.mean()), axis=0)
         df.time_to_metro = df.time_to_metro.fillna(df.time_to_metro.mean())
-
 
         # Check if main DF constains null values
         # print(df.isnull().sum())
@@ -188,25 +184,23 @@ class MainPreprocessing():
         df.is_rented = df.is_rented.fillna(True)
         df.is_rented = df.is_rented.astype(int)
 
-
-
-
         # Replace missed value 'RENT_YEAR' with posted year
         # now = datetime.datetime.now()
-        # df.rent_year = df.rent_year.fillna(df.changed_date.apply(lambda x: x[:4]))
+        # df.rent_year = df.rent_year.fillna(df.created_at.apply(lambda x: x[:4]))
         df.rent_year = df.rent_year.fillna(0)
         df.is_rented = df.is_rented.astype(int)
 
         # Replace missed value "RENT_QUARTER" with current quarter, when value was posted
-        # df.rent_quarter = df.rent_quarter.fillna(df.changed_date.apply(lambda x: x[5:7]))
+        # df.rent_quarter = df.rent_quarter.fillna(df.created_at.apply(lambda x: x[5:7]))
         # df.rent_quarter = df.rent_quarter.astype(int)
-        # df.rent_quarter = np.where(df.changed_date.apply(lambda x: int(x[5:7])) <= 12, 4, 4)
-        # df.rent_quarter = np.where(df.changed_date.apply(lambda x: int(x[5:7])) <= 9, 3, df.rent_quarter)
-        # df.rent_quarter = np.where(df.changed_date.apply(lambda x: int(x[5:7])) <= 6, 2, df.rent_quarter)
-        # df.rent_quarter = np.where(df.changed_date.apply(lambda x: int(x[5:7])) <= 3, 1, df.rent_quarter)
+        # df.rent_quarter = np.where(df.created_at.apply(lambda x: int(x[5:7])) <= 12, 4, 4)
+        # df.rent_quarter = np.where(df.created_at.apply(lambda x: int(x[5:7])) <= 9, 3, df.rent_quarter)
+        # df.rent_quarter = np.where(df.created_at.apply(lambda x: int(x[5:7])) <= 6, 2, df.rent_quarter)
+        # df.rent_quarter = np.where(df.created_at.apply(lambda x: int(x[5:7])) <= 3, 1, df.rent_quarter)
         df.rent_quarter = df.rent_quarter.fillna(0)
         df.is_rented = df.is_rented.astype(int)
 
+        print("Check if contains isnull: ..... ", df.isnull().sum())
         df = df.fillna(0)
 
         # Transform bool values to int
@@ -219,7 +213,6 @@ class MainPreprocessing():
         df.renovation_type = df.renovation_type.astype(int)
         df.windows_view = df.windows_view.astype(int)
 
-
         df = df.drop(['built_year', 'flats_count', 'district_id', 'name', 'transport_type'], axis=1)
 
         # Set values for floor_last/floor_first column: if floor_last/floor_first set 1, otherwise 0
@@ -231,49 +224,65 @@ class MainPreprocessing():
         num = df._get_numeric_data()
         num[num < 0] = 0
 
-
         # Count price per meter square for each flat
         df['price_meter_sq'] = df[['price', 'full_sq']].apply(
             lambda row: (row['price'] /
                          row['full_sq']), axis=1)
 
         # Check if data contains only Moscow offers
-        df = df[~(df['latitude'].astype('str').str.contains('59.'))]
+        df = df[((df['latitude'].astype('str').str.contains('55.')))]
         return df
 
-
-    def new_features(self, data: pd.DataFrame(), full_sq_corridor_percent: float, price_corridor_percent: float, part_data: int, K_clusters: int):
+    def new_features(self, data: pd.DataFrame(), full_sq_corridor_percent: float, price_corridor_percent: float,
+                     part_data: int, K_clusters: int):
         now = datetime.datetime.now()
         df = data
-        # No 1. Distance from city center
+        # No 1. Distance from city center in km
         Moscow_center_lon = 37.619291
         Moscow_center_lat = 55.751474
-        df['to_center'] = abs(Moscow_center_lon - df['longitude']) + abs(Moscow_center_lat - df['latitude'])
+
+
+        # approximate radius of earth in km
+        R = 6373.0
+
+        df['to_center'] = df[['longitude', 'latitude']].apply(
+            lambda row: (R * 2 * atan2(sqrt(sin((radians(row.latitude) - radians(Moscow_center_lat)) / 2)
+                                            ** 2 + cos(radians(Moscow_center_lat)) * cos(radians(row.latitude))
+                                            * sin((radians(row.longitude) - radians(Moscow_center_lon)) / 2) ** 2),
+                                       sqrt(1 - (sin((radians(row.latitude) - radians(Moscow_center_lat)) / 2)
+                                                 ** 2 + cos(radians(Moscow_center_lat)) * cos(radians(row.latitude))
+                                                 * sin(
+                                                   (radians(row.longitude) - radians(Moscow_center_lon)) / 2) ** 2)))),
+            axis=1)
+        print(df[['longitude', 'latitude', 'to_center']].head(5))
 
         # No 2. Fictive(for futher offer value calculating): yyyy_announc, mm_announc - year and month when flats were announced on market
-        df['yyyy_announce'] = df['changed_date'].str[2:4].astype('int64')
-        df['mm_announce'] = df['changed_date'].str[5:7].astype('int64')
+        df['yyyy_announce'] = df['created_at'].str[2:4].astype('int64')
+        df['mm_announce'] = df['created_at'].str[5:7].astype('int64')
+
+        df['yyyy_sold'] = df['close_date'].str[2:4].astype('int64')
+        df['mm_sold'] = df['close_date'].str[5:7].astype('int64')
 
         # No 3. Number of offers were added calculating by months and years
-        df['all_offers_added_in_month'] = df.groupby(['yyyy_announce', 'mm_announce'])["flat_id"].transform("count")
+        # df['all_offers_added_in_month'] = df.groupby(['yyyy_announce', 'mm_announce'])["flat_id"].transform("count")
 
-            # No 4. Convert changed_date and updated_at to unix timestamp. Convert only yyyy-mm-dd hh
-        df['open_date_unix'] = df['changed_date'].apply(
-            lambda row: int(time.mktime(ciso8601.parse_datetime(row[:-3]).timetuple())))
-        df['close_date_unix'] = df['updated_at'].apply(
-            lambda row: int(time.mktime(ciso8601.parse_datetime(row[:-3]).timetuple())))
+        # No 4. Convert created_at and close_date to unix timestamp. Convert only yyyy-mm-dd
+        df['open_date_unix'] =  np.where(df['closed'] == 1, df['created_at'].apply(
+            lambda row: int(time.mktime(ciso8601.parse_datetime(row[:-9]).timetuple()))), 0)
+        df['close_date_unix'] = np.where(df['closed'] == 1, df['close_date'].apply(
+            lambda row: int(time.mktime(ciso8601.parse_datetime(row).timetuple()))), 0)
 
         # Take just part of data
         if part_data:
             df = df.iloc[:len(df) // part_data]
 
         # Calculate number of "similar" flats which were on market when each closed offer was closed.
-        df['was_opened'] = [np.sum((df['open_date_unix'] < close_time) & (df['close_date_unix'] >= close_time) &
-                                   (df['rooms'] == rooms) &
-                                   ((df['full_sq'] <= full_sq * (1 + full_sq_corridor_percent / 100)) & (
-                                           df['full_sq'] >= full_sq * (1 - full_sq_corridor_percent / 100)))) for
-                            close_time, rooms, full_sq in
-                            zip(df['close_date_unix'], df['rooms'], df['full_sq'])]
+        # df['was_opened'] = [np.sum((df['open_date_unix'] < close_time) & (df['close_date_unix'] >= close_time) &
+        #                            (df['rooms'] == rooms) &
+        #                            ((df['full_sq'] <= full_sq * (1 + full_sq_corridor_percent / 100)) & (
+        #                                    df['full_sq'] >= full_sq * (1 - full_sq_corridor_percent / 100)))) for
+        #                     close_time, rooms, full_sq in
+        #                     zip(df['close_date_unix'], df['rooms'], df['full_sq'])]
 
         # Fill missed valeus for secondary flats
         df.loc[:, ['rent_quarter', 'rent_year']] = df[['rent_quarter', 'rent_year']].fillna(0)
@@ -293,8 +302,8 @@ class MainPreprocessing():
         # df['rooms'] = np.where(df['rooms'] > 6, 0, df['rooms'])
         df['mm_announce'] = np.where(((0 >= df['mm_announce']) | (df['mm_announce'] > 12)), 1,
                                      df['mm_announce'])
-        df['yyyy_announce'] = np.where(((17 >= df['yyyy_announce']) | (df['yyyy_announce'] > 20)), 19,
-                                       df['yyyy_announce'])
+        # df['yyyy_announce'] = np.where(((17 >= df['yyyy_announce']) | (df['yyyy_announce'] > 20)), 19,
+        #                                df['yyyy_announce'])
 
         # Transform data types
         df.rooms = df.rooms.astype(int)
@@ -303,14 +312,13 @@ class MainPreprocessing():
 
         return df
 
-
     def clustering(self, data: pd.DataFrame(), path_kmeans_models: str, K_clusters: int):
         # fit k-Means clustering on geo for SECONDARY flats
 
         data.longitude = data.longitude.fillna(data.longitude.mode()[0])
         data.latitude = data.latitude.fillna(data.latitude.mode()[0])
         kmeans = KMeans(n_clusters=K_clusters, random_state=42).fit(data[['longitude', 'latitude']])
-        dump(kmeans, path_kmeans_models + '/'+K_Means_file_name)
+        dump(kmeans, path_kmeans_models + '/' + K_Means_file_name)
         labels = kmeans.labels_
         data['clusters'] = labels
 
@@ -323,46 +331,45 @@ class MainPreprocessing():
         return data
 
     # Transform some features (such as mm_announce, rooms, clusters) to dummies
-    def to_dummies(self, data: pd.DataFrame):
-        df_mm_announce = pd.get_dummies(data, prefix='mm_announce_', columns=['mm_announce'])
-        # df_rooms = pd.get_dummies(data, prefix='rooms_', columns=['rooms'])
-        # df = pd.merge(df_mm_announce, df_rooms, how='left')
-
-        df_year_announce = pd.get_dummies(data=data, prefix='yyyy_announce_', columns=['yyyy_announce'])
-        df = pd.merge(df_mm_announce, df_year_announce, how='left')
-
-        df.drop(df.tail(K_CLUSTERS).index, inplace=True)
-
-        df = df.dropna(subset=['full_sq'])
-        return df
+    # def to_dummies(self, data: pd.DataFrame):
+    #     df_mm_announce = pd.get_dummies(data, prefix='mm_announce_', columns=['mm_announce'])
+    #     # df_rooms = pd.get_dummies(data, prefix='rooms_', columns=['rooms'])
+    #     # df = pd.merge(df_mm_announce, df_rooms, how='left')
+    #
+    #     df_year_announce = pd.get_dummies(data=data, prefix='yyyy_announce_', columns=['yyyy_announce'])
+    #     df = pd.merge(df_mm_announce, df_year_announce, how='left')
+    #
+    #     df.drop(df.tail(K_CLUSTERS).index, inplace=True)
+    #
+    #     df = df.dropna(subset=['full_sq'])
+    #     return df
 
     def train_price_model(self, data: pd.DataFrame):
 
         df = data
-        df = df[((np.abs(stats.zscore(df.price)) < 3)&(np.abs(stats.zscore(df.term)) < 3)&(np.abs(stats.zscore(df.full_sq)) < 3))]
+        df = df[((np.abs(stats.zscore(df.price)) < 2.8) & (np.abs(stats.zscore(df.term)) < 2.8) & (
+                    np.abs(stats.zscore(df.full_sq)) < 2.8))]
 
-
-
-        df = df[['price', 'full_sq', 'kitchen_sq', 'life_sq', 'rooms', 'is_apartment',
+        # !!!!!!!! ADD 'was_opened'
+        # Fix year: only 2019
+        df = df[(df.yyyy_announce.isin([19, 20]))]
+        df = df[['price', 'to_center', 'full_sq', 'kitchen_sq', 'life_sq', 'rooms', 'is_apartment',
                  'renovation', 'has_elevator',
                  'time_to_metro', 'floor_first', 'floor_last',
                  'is_rented', 'rent_quarter',
-                 'rent_year', 'to_center', 'was_opened', 'mm_announce__1',
-                 'mm_announce__2', 'mm_announce__3', 'mm_announce__4',
-                 'mm_announce__5', 'mm_announce__6', 'mm_announce__7', 'mm_announce__8', 'mm_announce__9',
-                 'mm_announce__10', 'mm_announce__11', 'mm_announce__12', 'yyyy_announce__18',
-                 'yyyy_announce__19', 'yyyy_announce__20',
-                 'clusters', 'schools_500m', 'schools_1000m', 'kindergartens_500m',
-                                       'kindergartens_1000m', 'clinics_500m', 'clinics_1000m', 'shops_500m',
-                                       'shops_1000m']]
+                 'rent_year', 'mm_announce', 'yyyy_announce',
+                 'clusters']]
         # Save leaved columns to variable
         columns = list(df.columns)
 
         # Log transformation
+        # Log Transformation
+
         df["full_sq"] = np.log1p(df["full_sq"])
         df["life_sq"] = np.log1p(df["life_sq"])
         df["kitchen_sq"] = np.log1p(df["kitchen_sq"])
         df["price"] = np.log1p(df["price"])
+        df["to_center"] = np.log1p(df["to_center"])
 
         # Create features - predictors
         X = df.drop(['price'], axis=1)
@@ -377,6 +384,7 @@ class MainPreprocessing():
         lgbm_model = LGBMRegressor(objective='regression',
                                    learning_rate=0.07,
                                    n_estimators=1250, max_depth=10, min_child_samples=1, verbose=0)
+        # RF = RandomForestRegressor(n_estimators=300, verbose=1, n_jobs=-1)
         # Train GBR on train dataset
         lgbm_model.fit(X_train, y_train)
         lgbm_preds = lgbm_model.predict(X_test)
@@ -387,60 +395,78 @@ class MainPreprocessing():
         lgbm_model.fit(X, y)
         return lgbm_model, columns
 
+    def calculate_profit_based_on_mean(self, data: pd.DataFrame):
+
+        # Group dataset by full_sq
+        list_of_squares = np.arange(38, 250, 4.5).tolist()
+        # [38.0, 42.5, 47.0, 51.5, 56.0, 60.5, 65.0, 69.5, 74.0, 78.5, 83.0,
+        # 87.5, 92.0, 96.5, 101.0, 105.5, 110.0, 114.5, 119.0]
+
+        # Initialize full_sq_group values with zero
+        data.loc[:, 'full_sq_group'] = 0
+
+        # Create dictionary: key = group number, value = lower threshold value of full_sq
+        # Example: {1: 38.0, 2: 42.5}
+        full_sq_grouping_dict = {}
+
+        # Update "full_sq_group" column value according to "full_sq" column value
+        for i in range(len(list_of_squares)):
+            # print(i + 1, self.list_of_squares[i])
+            full_sq_grouping_dict[i + 1] = list_of_squares[i]
+            data.loc[:, 'full_sq_group'] = np.where(data['full_sq'] >= list_of_squares[i], i + 1,
+                                                       data['full_sq_group'])
+
+        data.loc[: , 'mean_price'] = data.groupby(['flat_type', 'yyyy_announce', 'clusters', 'full_sq_group', 'rooms'])['price'].transform('mean')
+
+        data['profit'] = data[['mean_price', 'price']].apply(
+            lambda row: (100 - (row.price / (row.mean_price / 100))), axis=1)
+
+        return data
+
     def calculate_profit(self, data: pd.DataFrame, price_model: GradientBoostingRegressor, list_of_columns: list):
 
         data.closed = data.closed.fillna(False)
-        data_closed = data[data.closed == True]
-        opened_data = data[data.closed == False]
+        data_recent = data[(data.yyyy_announce.isin([19, 20]))]
+        data_not_recent = data[~(data.yyyy_announce.isin([19, 20]))]
 
         # data = data[list_of_columns]
-        data_closed['pred_price'] = data_closed[list_of_columns].apply(lambda row: int(np.expm1(price_model.predict(
-                [[np.log1p(row.full_sq), np.log1p(row.kitchen_sq), np.log1p(row.life_sq), row.rooms, row.is_apartment,
-                  row.renovation, row.has_elevator, row.time_to_metro, row.floor_first, row.floor_last,
-                  row.is_rented, row.rent_quarter, row.rent_year, row.to_center, row.was_opened, row.mm_announce__1,
-                  row.mm_announce__2, row.mm_announce__3, row.mm_announce__4, row.mm_announce__5, row.mm_announce__6,
-                  row.mm_announce__7, row.mm_announce__8, row.mm_announce__9,
-                  row.mm_announce__10, row.mm_announce__11, row.mm_announce__12,
-                  row.yyyy_announce__18, row.yyyy_announce__19, row.yyyy_announce__20,
-                  row.clusters, row.schools_500m, row.schools_1000m, row.kindergartens_500m,
-                                       row.kindergartens_1000m, row.clinics_500m, row.clinics_1000m, row.shops_500m,
-                                       row.shops_1000m]]))[0]), axis=1)
+        # !!!!! ADD row.was_opened
+        data_recent['pred_price'] = data_recent[list_of_columns].apply(lambda row: int(np.expm1(price_model.predict(
+            [[np.log1p(row.full_sq), np.log1p(row.to_center), np.log1p(row.kitchen_sq), np.log1p(row.life_sq), row.rooms, row.is_apartment,
+              row.renovation, row.has_elevator, row.time_to_metro, row.floor_first, row.floor_last,
+              row.is_rented, row.rent_quarter, row.rent_year, row.mm_announce, row.yyyy_announce,
+              row.clusters]]))[0]), axis=1)
 
-        data_closed['profit'] = data_closed[['pred_price', 'price']].apply(
-            lambda row: ((row.pred_price * 100 / row.price) - 100), axis=1)
+        data_recent['profit'] = data_recent[['pred_price', 'price']].apply(
+            lambda row: (100 - (row.price/(row.pred_price/100))), axis=1)
 
         # Handle negative profit values
         # data_closed['profit'] = data_closed['profit'] + 1 - data_closed['profit'].min()
 
         # Concat opened and closed
-        data = pd.concat([data_closed, opened_data], axis=0, ignore_index=True)
+        data = pd.concat([data_recent, data_not_recent], axis=0, ignore_index=True)
         data.profit = data.profit.fillna(0)
         return data
-
 
     def secondary_flats(self, data: pd.DataFrame(), path_to_save_data: str):
         # Create df with SECONDARY flats
         df_VTOR = data[(data.flat_type == 'SECONDARY')]
 
-
         # Save .csv with SECONDARY flats
         print('Saving SECONDARY flats to csv', df_VTOR.shape[0], flush=True)
-        df_VTOR.to_csv(path_to_save_data + '/'+SecondaryFlats_filename, index=None, header=True)
+        df_VTOR.to_csv(path_to_save_data + '/' + SecondaryFlats_filename, index=None, header=True)
 
-
-    def new_flats(self, data:pd.DataFrame(), path_to_save_data: str):
+    def new_flats(self, data: pd.DataFrame(), path_to_save_data: str):
 
         # Create df with NEW flats
-        df_new_flats = data[((data.flat_type == 'NEW_FLAT')|(data.flat_type == 'NEW_SECONDARY'))]
-
+        df_new_flats = data[((data.flat_type == 'NEW_FLAT') | (data.flat_type == 'NEW_SECONDARY'))]
 
         # Save .csv with NEW flats
         print('Saving NEW flats to csv', df_new_flats.shape[0], flush=True)
-        df_new_flats.to_csv(path_to_save_data + '/'+NewFlats_filename, index=None, header=True)
+        df_new_flats.to_csv(path_to_save_data + '/' + NewFlats_filename, index=None, header=True)
 
 
 if __name__ == '__main__':
-
     full_sq_corridor_percent = 1.5
     price_corridor_percent = 1.5
     K_CLUSTERS = 130
@@ -453,26 +479,30 @@ if __name__ == '__main__':
     print("Load data...", flush=True)
     df = mp.load_and_merge(raw_data=RAW_DATA)
 
+    # df = df.loc[:1000]
+
     # Generate new features
     print("New features generating...", flush=True)
     features_data = mp.new_features(data=df, full_sq_corridor_percent=full_sq_corridor_percent,
-                                    price_corridor_percent=price_corridor_percent, part_data=False, K_clusters=K_CLUSTERS)
+                                    price_corridor_percent=price_corridor_percent, part_data=False,
+                                    K_clusters=K_CLUSTERS)
 
     # Define clusters
     print("Defining clusters based on lon, lat...")
     cl_data = mp.clustering(features_data, path_kmeans_models=PATH_TO_CLUSTERING_MODELS, K_clusters=K_CLUSTERS)
 
     # Create dummies variables
-    print("Categorical features transforming to dummies...", flush=True)
-    cat_data = mp.to_dummies(cl_data)
+    # print("Categorical features transforming to dummies...", flush=True)
+    # cat_data = mp.to_dummies(cl_data)
 
     # Train price model
-    print("Price model training...", flush=True)
-    price_model, list_columns = mp.train_price_model(data=cat_data)
+    # print("Price model training...", flush=True)
+    # price_model, list_columns = mp.train_price_model(data=cl_data)
 
     # Calculate profit for each flat
     print("Profit calculating for each closed offer in dataset...", flush=True)
-    test = mp.calculate_profit(data=cat_data, price_model=price_model, list_of_columns=list_columns)
+    # test = mp.calculate_profit(data=cl_data, price_model=price_model, list_of_columns=list_columns)
+    test = mp.calculate_profit_based_on_mean(cl_data)
 
     # Create separate files for secondary flats
     mp.secondary_flats(data=test, path_to_save_data=PREPARED_DATA)

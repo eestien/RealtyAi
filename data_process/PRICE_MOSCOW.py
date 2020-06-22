@@ -32,10 +32,15 @@ PATH_TO_PRICE_MODEL_LGBM = SETTINGS.MODEL_MOSCOW + '/PriceModel_MOSCOW_LGBM_D.jo
 def Price_Main(data: pd.DataFrame):
 
     # Remove price and term outliers (out of 3 sigmas)
-    data = data[((np.abs(stats.zscore(data.price)) < 3)&(np.abs(stats.zscore(data.term)) < 3))]
+    data = data[((np.abs(stats.zscore(data.price)) < 2.5)&(np.abs(stats.zscore(data.term)) < 2.5) &
+                 (np.abs(stats.zscore(data.full_sq)) < 2.5))]
+
 
     # Fill NaN if it appears after merging
     data[['term']] = data[['term']].fillna(data[['term']].mean())
+
+    # Fix year
+    data = data[((data.yyyy_announce == 19) | (data.yyyy_announce == 20))]
 
     # Log Transformation
     data["longitude"] = np.log1p(data["longitude"])
@@ -44,60 +49,63 @@ def Price_Main(data: pd.DataFrame):
     data["life_sq"] = np.log1p(data["life_sq"])
     data["kitchen_sq"] = np.log1p(data["kitchen_sq"])
     data["price"] = np.log1p(data["price"])
-    X = data[['life_sq', 'rooms', 'renovation', 'has_elevator', 'longitude', 'latitude', 'full_sq', 'kitchen_sq',
+    data["to_center"] = np.log1p(data["to_center"])
+    X = data[['life_sq', 'to_center', 'mm_announce', 'rooms', 'renovation', 'has_elevator', 'longitude', 'latitude', 'full_sq', 'kitchen_sq',
               'time_to_metro', 'floor_last', 'floor_first', 'clusters', 'is_rented', 'rent_quarter', 'rent_year']]
 
     y = data[['price']].values.ravel()
-    print(X.shape, y.shape, flush=True)
+
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1)
 
     # GBR model
-    gbr_model = GradientBoostingRegressor(n_estimators=350, max_depth=9, verbose=1, random_state=42,
-                                          learning_rate=0.07)
+    gbr_model = GradientBoostingRegressor(n_estimators=350, max_depth=8, verbose=1, random_state=42)
 
+    print(10 * '-', '> GBR Msc started fitting...')
     gbr_model.fit(X_train, y_train)
     gbr_preds = gbr_model.predict(X_test)
-    print('The R2_score of the Gradient boost is', r2_score(y_test, gbr_preds), flush=True)
-    print('RMSE is: \n', mean_squared_error(y_test, gbr_preds), flush=True)
+    print('Msc GBR R2_score: ', r2_score(y_test, gbr_preds), flush=True)
+    print('Msc GBR RMSE: ', mean_squared_error(y_test, gbr_preds), flush=True)
 
-    print('Train on full dataset GBR Spb: ', flush=True)
+    print('Train GBR on full Msc dataset: ', flush=True)
     gbr_model.fit(X, y)
 
-    print('Save model GBR Spb: ', flush=True)
+    print('GBR Msc model saved !', flush=True)
     dump(gbr_model, PATH_TO_PRICE_MODEL_GBR)
 
     # RANDOM FOREST REGRESSOR
-    RF = RandomForestRegressor(n_estimators=300, min_samples_leaf=3, verbose=1, n_jobs=-1)
+    RF = RandomForestRegressor(n_estimators=300, verbose=1, n_jobs=-1)
 
+    print(10 * '-', '> RF Msc started fitting...')
     RF.fit(X_train, y_train)
 
     rf_predicts = RF.predict(X_test)
 
-    print('The accuracy of the RandomForest is', r2_score(y_test, rf_predicts), flush=True)
-    print('RMSE is: \n', mean_squared_error(y_test, rf_predicts), flush=True)
+    print('Msc RF R2_score: ', r2_score(y_test, rf_predicts), flush=True)
+    print('Msc RF RMSE: ', mean_squared_error(y_test, rf_predicts), flush=True)
 
-    print('Train on full dataset RF secondary Spb: ', flush=True)
+    print('Train RF on full Msc dataset: ', flush=True)
     RF.fit(X, y)
 
-    print('Save model RF secondary Spb: ', flush=True)
+    print('RF Msc model saved !', flush=True)
     dump(RF, PATH_TO_PRICE_MODEL_RF)
 
 
     # LGBM model
     lgbm_model = LGBMRegressor(objective='regression',
                                learning_rate=0.1,
-                               n_estimators=1250, max_depth=5, min_child_samples=1, verbose=0)
+                               n_estimators=1250, max_depth=7, min_child_samples=1, verbose=0)
 
+    print(10 * '-', '> LGBM Msc started fitting...')
     lgbm_model.fit(X_train, y_train)
     lgbm_preds = lgbm_model.predict(X_test)
-    print('The accuracy of the lgbm Regressor is', r2_score(y_test, lgbm_preds), flush=True)
-    print('RMSE is: \n', mean_squared_error(y_test, lgbm_preds), flush=True)
+    print('Msc LGBM R2_score: ', r2_score(y_test, lgbm_preds), flush=True)
+    print('Msc LGBM RMSE: ', mean_squared_error(y_test, lgbm_preds), flush=True)
 
-    print('Train on full dataset LGBM secondary Spb: ', flush=True)
+    print('Train LGBM on full Msc dataset: ', flush=True)
     lgbm_model.fit(X, y)
 
-    print('Save model LGBM secondary Spb: ', flush=True)
+    print('LGBM Msc model saved !', flush=True)
     dump(lgbm_model, PATH_TO_PRICE_MODEL_LGBM)
 
 # def Model_Secondary_D(data: pd.DataFrame):

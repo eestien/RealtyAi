@@ -1,7 +1,11 @@
-from flask import Flask, request, jsonify, url_for
+from flask import Flask, request, jsonify
 import json
+import time
+from datetime import datetime
 
-from data_process.main_process import mean_estimation, map_estimation, predict_developers_term
+from utils.developers import predict_developers_term
+from utils.price_term import map_estimation
+from utils.profitable_offers import mean_estimation
 from app.db_queries import get_other_params
 import settings_local as SETTINGS
 
@@ -37,7 +41,7 @@ def mean():
                             floor_first,
                             floor_last, time_to_metro, city_id)
 
-    print('flats info', flats, flush=True)
+    # print('flats info', flats, flush=True)
 
     flats_count = len(flats)
     flats_page_count = 10
@@ -96,12 +100,65 @@ def map():
 def builder():
     result = json.loads(request.data.decode())
 
-    image_link = SETTINGS.HOST + SETTINGS.MEDIA_ROOT + 'test.jpg'
-    print(image_link, flush=True)
+    print('query params', result, flush=True)
 
-    result = predict_developers_term(result)
+    is_rented = 0
+    rent_year = 0# result['rent_year'] if result['rent_year'] is not None else None
+    rent_quarter = 0 # result['rent_quarter'] if result['rent_quarter'] is not None else None
+    schools_500m = 0 # result['schools_500m'] if result['schools_500m'] is not None else None
+    schools_1000m = 0 #result['schools_1000m'] if result['schools_1000m'] is not None else None
+    kindergartens_500m = 0 #result['kindergartens_500m'] if result['kindergartens_500m'] is not None else None
+    kindergartens_1000m = 0 # result['kindergartens_1000m'] if result['kindergartens_1000m'] is not None else None
+    clinics_500m = 0 # result['clinics_500m'] if result['clinics_500m'] is not None else None
+    clinics_1000m = 0# result['clinics_1000m'] if result['clinics_1000m'] is not None else None
+    shops_500m = 0 #result['shops_500m'] if result['shops_500m'] is not None else None
+    shops_1000m = 0 #result['shops_1000m'] if result['shops_1000m'] is not None else None
 
-    print(result, flush=True)
+    try:
+        city_id = int(result['city_id'])
+        longitude = result['longitude']
+        latitude = result['latitude']
+        housing_class = int(result['housing_class'])
+        floors_count = int(result['floors_count'])
+        has_elevator = int(result['elevator'])
+        parking = int(result['parking'])
+        time_to_metro = result['time_to_metro']
+        flats = result['flats']
+        start_timestamp = result['start_timestamp'] # Actually string
+        end_timestamp = result['end_timestamp'] # Actually string dd.mm.yyyy
+
+
+    except KeyError as err:
+        return jsonify({'message': str(err)})
+    print(start_timestamp, end_timestamp, flush=True)
+
+    mm_start = int(datetime.utcfromtimestamp(start_timestamp).strftime('%m'))  # Get month from unix
+    # mm_start = int(start_timestamp[3:5])
+    yyyy_start = int(datetime.utcfromtimestamp(start_timestamp).strftime('%Y'))  # Get year from unix
+    # yyyy_start = int(start_timestamp[-4:])
+    mm_end = int(datetime.utcfromtimestamp(end_timestamp).strftime('%m'))  # Get month from unix
+    # mm_end = int(end_timestamp[3:5])
+    yyyy_end = int(datetime.utcfromtimestamp(end_timestamp).strftime('%Y'))  # Get year from unix
+    # yyyy_end = int(end_timestamp[-4:])
+
+
+    first_graphic, second_graphic, third_graphic = predict_developers_term(city_id=city_id, longitude=longitude, latitude=latitude, is_rented=is_rented,
+                                     rent_year=rent_year, rent_quarter=rent_quarter, floors_count=floors_count,
+                                     has_elevator=has_elevator, parking=parking, time_to_metro=time_to_metro, flats=flats,
+                                     sale_start_month=mm_start, sale_end_month=mm_end,
+                                     sale_start_year=yyyy_start, sale_end_year=yyyy_end, schools_500m=schools_500m,
+                                     schools_1000m=schools_1000m, kindergartens_500m=kindergartens_500m,
+                                     kindergartens_1000m=kindergartens_1000m, clinics_500m=clinics_500m,
+                                     clinics_1000m=clinics_1000m, shops_500m=shops_500m, shops_1000m=shops_1000m, housing_class=housing_class)
+
+    print("Result OK.", flush=True)
     # print(type(result), flush=True)
 
-    return jsonify({'result': result, 'image_link': image_link})
+
+    return jsonify({'first_graphic': first_graphic, 'second_graphic': second_graphic, 'third_graphic': third_graphic})
+
+
+@app.route('/test-route/')
+def test():
+    time.sleep(80)
+    return jsonify({'status': 'ok'})
