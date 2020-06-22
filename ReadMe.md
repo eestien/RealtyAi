@@ -9,7 +9,6 @@ TODO:
 
 host: https://smartrealty.ai
 
-<<<<<<< HEAD
 =======
 - - - -
 ### Profitable Offers ###
@@ -72,4 +71,4 @@ flat is more profitable(sale price is less than it must be) it will sell out fas
 ### Оценка стоимости объекта и срока продажи. ###
 
 ![Screenshot](https://github.com/eestien/RealtyAi/blob/master/screen_example.png)
->>>>>>> 2b33ca305b8b81fc486ef3a7600136328425e77b
+
